@@ -17,61 +17,22 @@ struct AuthorizationService {
         let privateKey: String
     }
 
-    private enum InternalData {
-        case commandLineService(CommandLineService)
-        case rawData(RawData)
-    }
-
-    private let data: InternalData
-
-    init(commandLineService: CommandLineService) {
-        data = .commandLineService(commandLineService)
-    }
+    private let data: RawData
 
     init(keyId: String,
          issuerId: String,
          privateKey: String) {
 
         let rawData = RawData(keyId: keyId, issuerId: issuerId, privateKey: privateKey)
-        data = .rawData(rawData)
-    }
-
-    private func value(for parameter: AuthorizationParameter, using commandLineService: CommandLineService) -> Result<String, Self.Error> {
-        return commandLineService
-            .value(for: parameter)
-            .mapError { (commandLineError) -> Error in
-                return Error(message: commandLineError.message)
-            }
-    }
-
-    private func rawData() -> Result<RawData, Self.Error> {
-        switch data {
-        case .rawData(let data):
-            return .success(data)
-        case .commandLineService(let service):
-            let issuerIdentifier = value(for: .issuerIdentifier, using: service)
-
-            let keyIdentifier = value(for: .keyIdentifier, using: service)
-            let privateKey = value(for: .privateKey, using: service)
-            return issuerIdentifier
-                .concatenate(keyIdentifier, mapError: mapError)
-                .concatenate(privateKey, mapError: mapError)
-                .map { (values) -> RawData in
-                    return RawData(keyId: values.success.other, issuerId: values.success.success, privateKey: values.other)
-                }
-        }
+        data = rawData
     }
 
     func authorizationToken() -> Result<String, Self.Error> {
-
-        let token = rawData()
-                .flatMap({ (data) -> Result<(AppStoreConnectSigner, privateKey: Data), Self.Error> in
-                    guard let privateKey = data.privateKey.data(using: .utf8) else {
-                        return .failure(.init(message: "Provided private key is invalid"))
-                    }
-                    let payload = AppStoreConnectPayload(issuerIdentifier: data.issuerId)
-                    return .success((AppStoreConnectSigner(keyIdentifier: data.keyId, payload: payload), privateKey))
-                })
+        return createPrivateKey(for: data.privateKey)
+                .map { (privateKey) -> (AppStoreConnectSigner, privateKey: Data) in
+                    let payload = AppStoreConnectPayload(issuerIdentifier: self.data.issuerId)
+                    return (AppStoreConnectSigner(keyIdentifier: self.data.keyId, payload: payload), privateKey)
+                }
                 .flatMap { (signerAndPrivateKey) -> Result<String, Self.Error> in
                     let (signer, privateKey)  = signerAndPrivateKey
                     do {
@@ -81,10 +42,16 @@ struct AuthorizationService {
                         return .failure(.init(message: "Could not generate JWT token"))
                     }
             }
-        return token
     }
 
-    private func mapError<Enything>(error: Result<Enything, Self.Error>.ConcatenatedError<Self.Error>) -> Self.Error {
+    private func createPrivateKey(for privateToken: String) -> Result<Data, Self.Error> {
+        guard let privateKey = data.privateKey.data(using: .utf8) else {
+            return .failure(.init(message: "Provided private key is invalid"))
+        }
+        return .success(privateKey)
+    }
+
+    private func mapError<Anything>(error: Result<Anything, Self.Error>.ConcatenatedError<Self.Error>) -> Self.Error {
 
         switch error {
         case let .both(payloadError, keyIdentifierError):

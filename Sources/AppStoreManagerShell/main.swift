@@ -9,23 +9,6 @@ extension BundleIdPlatform: ExpressibleByArgument {}
 
 struct Logger {
     static let logger = OSLog(subsystem: "com.azimo.appStoreManager", category: "shell")
-
-    static func logHelper<T: HelperDescriptionProvider>(using descriptionProvider: T) {
-        let commandLineService = CommandLineService(arguments: CommandLine.arguments)
-
-        let authorizationParameters = descriptionProvider.authorizationIsNeeded ? AuthorizationParameter.helperDescription() : nil
-
-        let parameters: [String?] = [
-            T.commandKey,
-            T.helperDescription(),
-            authorizationParameters
-        ]
-        let description = parameters.reduce(commandLineService.getScriptName()) { (result, next) -> String in
-            guard let value = next else { return result }
-            return "\(result) \(value)"
-        }
-        os_log("%{public}@", log: Self.logger, type: .error, description)
-    }
 }
 
 protocol AuthorizedAction {
@@ -39,12 +22,11 @@ func getAuthorizationToken(action: AuthorizedAction) -> String {
     if action.privateKey.hasPrefix("-----BEGIN") == false,
        action.privateKey.contains("\\n") {
 
-    privateKey = """
-    -----BEGIN PRIVATE KEY-----
-    \(action.privateKey.replacingOccurrences(of: "\\n", with: "\n"))
-    -----END PRIVATE KEY-----
-
-    """
+        privateKey = """
+        -----BEGIN PRIVATE KEY-----
+        \(action.privateKey.replacingOccurrences(of: "\\n", with: "\n"))
+        -----END PRIVATE KEY-----
+        """
     } else {
         privateKey = action.privateKey
     }
