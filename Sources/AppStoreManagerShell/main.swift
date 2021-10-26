@@ -57,7 +57,8 @@ struct AppStoreManager: ParsableCommand {
             Builds.self,
             LastBuildNumber.self,
             UpdateWhatIsNew.self,
-            CreateVersionAction.self
+            CreateVersionAction.self,
+            Authorise.self
         ])
 }
 

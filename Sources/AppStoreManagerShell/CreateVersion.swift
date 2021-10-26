@@ -10,11 +10,18 @@ import os
 import ArgumentParser
 import AppStoreManager
 
-struct CreateVersionAction: ParsableCommand, AuthorizedAction {
+struct CreateVersionAction: ParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "create-version",
         abstract: "Create a new app version")
+
+    @Option(
+        help: ArgumentHelp(
+            "The JWT token",
+            discussion: "To generate JWT token use the authorise ",
+            shouldDisplay: true))
+    var jwtToken: String
 
     @Option(
         help: ArgumentHelp(
@@ -26,60 +33,38 @@ struct CreateVersionAction: ParsableCommand, AuthorizedAction {
         help: ArgumentHelp(
             "The app identifier",
             shouldDisplay: true))
-    var appId: String
+    var appIdentifier: String
 
     @Option(
         help: ArgumentHelp(
-            "The app version",
+            "Platform for which the version should be created",
             shouldDisplay: true))
     var platform: BundleIdPlatform = .iOS
 
-    @Option(
-        help: ArgumentHelp(
-            "The key identifier",
-            shouldDisplay: true))
-    var keyId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The issuer identifier",
-            shouldDisplay: true))
-    var issuerId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The private key",
-            shouldDisplay: true))
-    var privateKey: String
-
     func run() throws {
-        os_log("Run %{public}@", log: Logger.logger, type: .info, Self.configuration.commandName ?? "Unknown name")
-        let authorizationToken = getAuthorizationToken(action: self)
-        let client = Client(authorizationTokenProvider: { authorizationToken })
-        let semaphore = DispatchSemaphore(value: 0)
 
+        let client = Client(authorizationTokenProvider: { jwtToken })
         let update = CreateVersion(
             attributes: .init(platform: platform, versionString: appVersion),
-            app: .init(id: appId))
+            app: .init(id: appIdentifier))
         let request = try CreateVersionRequest(for: update)
 
+        let semaphore = DispatchSemaphore(value: 0)
         let cancelable = client.perform(request)
             .sink(
                 receiveCompletion: { (completion) in
                     switch completion {
                     case .finished:
-                        os_log("Finished %{public}@", log: Logger.logger, type: .info, Self.configuration.commandName ?? "Unknown name")
+                        Self.exit(withError: CleanExit.message(""))
                     case let .failure(error):
-                        let stringError = "\(error)"
-                        os_log("%{public}@", log: Logger.logger, type: .error, stringError)
-                        _exit(ExitCode.failure.rawValue)
+                        Self.exit(withError: ValidationError("\(error)"))
                     }
                 },
                 receiveValue: { (app) in
-                    print(app.data)
-                    semaphore.signal()
+                    Self.exit(withError: CleanExit.message("\(app.data)"))
                 })
         _ = semaphore.wait(timeout: .now() + .seconds(10))
         withExtendedLifetime(cancelable, {})
+        Self.exit(withError: ValidationError("The request has timed out"))
     }
 }

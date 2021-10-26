@@ -33,21 +33,10 @@ struct RegisterDevice: ParsableCommand {
 
     @Option(
         help: ArgumentHelp(
-            "The key identifier",
+            "The JWT token",
+            discussion: "To generate JWT token use the authorise ",
             shouldDisplay: true))
-    var keyId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The issuer identifier",
-            shouldDisplay: true))
-    var issuerId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The private key",
-            shouldDisplay: true))
-    var privateKey: String
+    var jwtToken: String
 
 
     func run() throws {
@@ -62,71 +51,26 @@ struct RegisterDevice: ParsableCommand {
     }
 
     private func register(_ request: NewDeviceRequest) {
-        let authorizationToken = getAuthorizationToken()
-        let client = Client(authorizationTokenProvider: { authorizationToken })
+        let client = Client(authorizationTokenProvider: { jwtToken })
 
-        _ = client
+        let semaphore = DispatchSemaphore(value: 0)
+        let cancelable = client
             .perform(request)
             .sink(
                 receiveCompletion: { (completion) in
                     switch completion {
                     case .finished:
-                        _exit(ExitCode.success.rawValue) //TODO: no response (empty chain) will also success :(
+                        Self.exit(withError: CleanExit.message(""))
                     case let .failure(error):
-                        let stringError = "\(error)"
-                        os_log("%@", log: Logger.logger, type: .error, stringError)
-                        _exit(ExitCode.failure.rawValue)
+                        Self.exit(withError: ValidationError("\(error)"))
                     }
                 },
-                receiveValue: { (_) in })
+                receiveValue: { (_) in
+                    Self.exit(withError: CleanExit.message(""))
+                })
 
-        RunLoop.main.run()
-    }
-
-    private func getAuthorizationToken() -> String {
-        let authorizationService = AuthorizationService(keyId: keyId, issuerId: issuerId, privateKey: privateKey)
-        let authorizationTokenResult = authorizationService.authorizationToken()
-
-        switch authorizationTokenResult {
-        case let .success(token):
-            return token
-        case let .failure(error):
-            handle(error)
-            _exit(ExitCode.failure.rawValue)
-        }
-    }
-
-    private func handle(_ error: AuthorizationService.Error) {
-        os_log("Could not generate JWT token: \n%{public}@", log: Logger.logger, type: .error, error.message)
-    }
-
-    private func handle(_ error: Self.Error) {
-        os_log("%{public}@", log: Logger.logger, type: .error, error.message)
-    }
-
-    private func mapError<Enything>(error: Result<Enything, Self.Error>.ConcatenatedError<Self.Error>) -> Self.Error {
-
-        switch error {
-        case let .both(payloadError, keyIdentifierError):
-            return .init(message: "\(payloadError.message)\n\(keyIdentifierError.message)")
-        case let .failure(error),
-             let .other(error):
-            return error
-        }
-    }
-}
-
-extension RegisterDevice {
-
-    struct Error: Swift.Error {
-        /// The message do not have any private data
-        let message: String
-    }
-}
-
-extension RegisterDevice.Error: ExpressibleByStringLiteral, ExpressibleByStringInterpolation {
-
-    init(stringLiteral: String) {
-        self = Self(message: stringLiteral)
+        _ = semaphore.wait(timeout: .now() + .seconds(10))
+        withExtendedLifetime(cancelable, {})
+        Self.exit(withError: ValidationError("The request has timed out"))
     }
 }
