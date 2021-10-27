@@ -11,7 +11,7 @@ import ArgumentParser
 import os
 import Combine
 
-struct UpdateWhatIsNew: ParsableCommand, AuthorizedAction {
+struct UpdateWhatIsNew: ParsableCommand {
 
     static var configuration = CommandConfiguration(
         abstract: "This command will get the recent version in the status `Ready to sell` and copy paste the `What is new` section to the version in the `Prepare for submission` status",
@@ -23,41 +23,28 @@ struct UpdateWhatIsNew: ParsableCommand, AuthorizedAction {
 
     @Option(
         help: ArgumentHelp(
-            "The key identifier",
+            "The JWT token",
+            discussion: "To generate JWT token use the authorise ",
             shouldDisplay: true))
-    var keyId: String
+    var jwtToken: String
 
     @Option(
         help: ArgumentHelp(
-            "The issuer identifier",
-            shouldDisplay: true))
-    var issuerId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The private key",
-            shouldDisplay: true))
-    var privateKey: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The application identifeir",
+            "The application identifier",
             shouldDisplay: true))
     var appIdentifier: String
 
     func run() throws {
-        let authorizationToken = getAuthorizationToken(action: self)
-        let client = Client(authorizationTokenProvider: { authorizationToken })
-        let semaphore = DispatchSemaphore(value: 0)
+        let client = Client(authorizationTokenProvider: { jwtToken })
 
         //Get last two. The second one should have status ready for sell. We will take what is new from this one and paste them to the new version
         let getLocalisations = GetAppStoreVersionsRequests(identifier: appIdentifier, limit: 2)
 
+        let semaphore = DispatchSemaphore(value: 0)
         let cancelable = client
             .perform(getLocalisations)
             .flatMap { response -> AnyPublisher<([GetAppStoreVersionLocalisation.ResponseObject], [GetAppStoreVersionLocalisation.ResponseObject]), Client.Error> in
 
-                os_log("GetAppStoreVersionsRequests finished: %{public}@", log: Logger.logger, type: .info, response.data)
                 let readyForSale = self.findFirstItem(in: response.data, with: .READY_FOR_SALE)
                 let getLocalised = self.getLocalisations(for: readyForSale, client: client)
 
@@ -69,7 +56,6 @@ struct UpdateWhatIsNew: ParsableCommand, AuthorizedAction {
                 }
                 .eraseToAnyPublisher()
             }
-
             .map { (localised, toLocalise) -> [(String, GetAppStoreVersionLocalisation.ResponseObject)] in
 
                 //connect the localised message from the previous version with new one
@@ -78,7 +64,7 @@ struct UpdateWhatIsNew: ParsableCommand, AuthorizedAction {
                         let localisedItem = localised.first(where: { $0.attributes.locale == toLocaliseItem.attributes.locale }),
                         let whatIsNew = localisedItem.attributes.whatsNew
                     else {
-                        os_log("There is no localised version for %{public}@", log: Logger.logger, type: .fault, toLocaliseItem.attributes.locale)
+                        os_log("There is no localised version for %{public}@", log: Logger.logger, type: .info, toLocaliseItem.attributes.locale)
                         //ignore if new language
                         return nil
                     }
@@ -119,11 +105,9 @@ struct UpdateWhatIsNew: ParsableCommand, AuthorizedAction {
                 receiveCompletion: { (completion) in
                     switch completion {
                     case .finished:
-                        break
+                        Self.exit(withError: CleanExit.message(""))
                     case let .failure(error):
-                        let stringError = "\(error)"
-                        os_log("%{public}@", log: Logger.logger, type: .error, stringError)
-                        _exit(ExitCode.failure.rawValue)
+                        Self.exit(withError: ValidationError("\(error)"))
                     }
                 },
                 receiveValue: { (_) in
@@ -131,6 +115,7 @@ struct UpdateWhatIsNew: ParsableCommand, AuthorizedAction {
                 })
         _ = semaphore.wait(timeout: .now() + .seconds(10))
         withExtendedLifetime(cancelable, {})
+        Self.exit(withError: ValidationError("The request has timed out"))
     }
 
     private func findFirstItem(in response: GetAppStoreVersionsRequests.Response, with state: AppStoreVersion.State) -> GetAppStoreVersionsRequests.ResponseObject {

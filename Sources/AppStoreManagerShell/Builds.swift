@@ -10,25 +10,14 @@ import ArgumentParser
 import AppStoreManager
 import os
 
-struct Builds: ParsableCommand, AuthorizedAction {
-    
-    @Option(
-        help: ArgumentHelp(
-            "The key identifier",
-            shouldDisplay: true))
-    var keyId: String
+struct Builds: ParsableCommand {
 
     @Option(
         help: ArgumentHelp(
-            "The issuer identifier",
+            "The JWT token",
+            discussion: "To generate JWT token use the authorise ",
             shouldDisplay: true))
-    var issuerId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The private key",
-            shouldDisplay: true))
-    var privateKey: String
+    var jwtToken: String
 
     @Option(
         help: ArgumentHelp(
@@ -43,50 +32,39 @@ struct Builds: ParsableCommand, AuthorizedAction {
     var appIdentifier: String?
 
     func run() throws {
-        let authorizationToken = getAuthorizationToken(action: self)
-        let client = Client(authorizationTokenProvider: { authorizationToken })
-
+        let client = Client(authorizationTokenProvider: { jwtToken })
         let filters = appIdentifier.map { (identifier) -> Set<AllBuildsRequest.Filter> in
             [.appIdentifier(identifier)]
         }
+        let semaphore = DispatchSemaphore(value: 0)
         let cancelable = client.perform(AllBuildsRequest(filters: filters ?? [], limit: limit))
             .sink(
                 receiveCompletion: { (completion) in
                     switch completion {
                     case .finished:
-                        _exit(ExitCode.success.rawValue) //TODO: no response (empty chain) will also success :(
+                        Self.exit(withError: CleanExit.message(""))
                     case let .failure(error):
-                        let stringError = "\(error)"
-                        os_log("%@", log: Logger.logger, type: .error, stringError)
-                        _exit(ExitCode.failure.rawValue)
+                        Self.exit(withError: ValidationError("\(error)"))
                     }
                 },
-                receiveValue: { (builds) in })
-
-        RunLoop.main.run()
+                receiveValue: { (builds) in
+                    Self.exit(withError: CleanExit.message(""))
+                    //do nothing as for know. Do we really need it in the shell?
+                })
+        _ = semaphore.wait(timeout: .now() + .seconds(10))
         withExtendedLifetime(cancelable, {})
+        Self.exit(withError: ValidationError("The request has timed out"))
     }
 }
 
-struct LastBuildNumber: ParsableCommand, AuthorizedAction {
+struct LastBuildNumber: ParsableCommand {
 
     @Option(
         help: ArgumentHelp(
-            "The key identifier",
+            "The JWT token",
+            discussion: "To generate JWT token use the authorise ",
             shouldDisplay: true))
-    var keyId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The issuer identifier",
-            shouldDisplay: true))
-    var issuerId: String
-
-    @Option(
-        help: ArgumentHelp(
-            "The private key",
-            shouldDisplay: true))
-    var privateKey: String
+    var jwtToken: String
 
     @Option(
         help: ArgumentHelp(
@@ -95,31 +73,27 @@ struct LastBuildNumber: ParsableCommand, AuthorizedAction {
     var appIdentifier: String
 
     func run() throws {
-        let authorizationToken = getAuthorizationToken(action: self)
-        let client = Client(authorizationTokenProvider: { authorizationToken })
+        let client = Client(authorizationTokenProvider: { jwtToken })
         let semaphore = DispatchSemaphore(value: 0)
         let cancelable = client.perform(AllBuildsRequest(filters: [.appIdentifier(appIdentifier)], limit: 1))
             .sink(
                 receiveCompletion: { (completion) in
                     switch completion {
                     case .finished:
-                        _exit(ExitCode.success.rawValue) //TODO: no response (empty chain) will also success :(
+                        Self.exit(withError: CleanExit.message(""))
                     case let .failure(error):
-                        let stringError = "\(error)"
-                        os_log("%@", log: Logger.logger, type: .error, stringError)
-                        _exit(ExitCode.failure.rawValue)
+                        Self.exit(withError: ValidationError("\(error)"))
                     }
                 },
                 receiveValue: { (builds) in
                     if let first = builds.data.first {
-                        print(first.attributes.version)
-                        semaphore.signal()
+                        Self.exit(withError: CleanExit.message(first.attributes.version))
                     } else {
-                        _exit(ExitCode.failure.rawValue)
+                        Self.exit(withError: ValidationError("The list of builds is empty"))
                     }
                 })
-//        RunLoop.main.run()
         _ = semaphore.wait(timeout: .now() + .seconds(10))
         withExtendedLifetime(cancelable, {})
+        Self.exit(withError: ValidationError("The request has timed out"))
     }
 }
