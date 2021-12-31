@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import os
 import AppStoreManager
 import ArgumentParser
 
@@ -54,23 +53,15 @@ struct RegisterDevice: ParsableCommand {
         let client = Client(authorizationTokenProvider: { jwtToken })
 
         let semaphore = DispatchSemaphore(value: 0)
-        let cancelable = client
-            .perform(request)
-            .sink(
-                receiveCompletion: { (completion) in
-                    switch completion {
-                    case .finished:
-                        Self.exit(withError: CleanExit.message(""))
-                    case let .failure(error):
-                        Self.exit(withError: ValidationError("\(error)"))
-                    }
-                },
-                receiveValue: { (_) in
-                    Self.exit(withError: CleanExit.message(""))
-                })
-
+        Task {
+            do {
+                let response: Device = try await client.perform(request).get().data
+                Self.exit(withError: CleanExit.message("New device registered: id: \(response.identifier), UUID:\(response.attributes.udid ?? "unknown")"))
+            } catch {
+                Self.exit(withError: ValidationError("\(error)"))
+            }
+        }
         _ = semaphore.wait(timeout: .now() + .seconds(10))
-        withExtendedLifetime(cancelable, {})
         Self.exit(withError: ValidationError("The request has timed out"))
     }
 }

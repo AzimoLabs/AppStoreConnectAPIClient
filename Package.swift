@@ -23,7 +23,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/IBM-Swift/Swift-JWT.git", from: "3.6.200"),
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "0.4.3"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.0.2")),
         ],
     targets: [
         .target(

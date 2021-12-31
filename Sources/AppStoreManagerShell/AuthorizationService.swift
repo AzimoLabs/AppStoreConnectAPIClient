@@ -7,7 +7,6 @@
 
 import Foundation
 import AppStoreManagerAuthorization
-import os
 
 struct AuthorizationService {
 
@@ -28,19 +27,19 @@ struct AuthorizationService {
     }
 
     func authorizationToken() -> Result<String, Self.Error> {
-        return createPrivateKey(for: data.privateKey)
-                .map { (privateKey) -> (AppStoreConnectSigner, privateKey: Data) in
-                    let payload = AppStoreConnectPayload(issuerIdentifier: self.data.issuerId)
-                    return (AppStoreConnectSigner(keyIdentifier: self.data.keyId, payload: payload), privateKey)
+        createPrivateKey(for: data.privateKey)
+            .map { (privateKey) -> (AppStoreConnectSigner, privateKey: Data) in
+                let payload = AppStoreConnectPayload(issuerIdentifier: self.data.issuerId)
+                return (AppStoreConnectSigner(keyIdentifier: self.data.keyId, payload: payload), privateKey)
+            }
+            .flatMap { (signerAndPrivateKey) -> Result<String, Self.Error> in
+                let (signer, privateKey)  = signerAndPrivateKey
+                do {
+                    let token = try signer.generateJWTToken(usingPrivateKey: privateKey)
+                    return .success(token)
+                } catch {
+                    return .failure(.init(message: "Could not generate JWT token"))
                 }
-                .flatMap { (signerAndPrivateKey) -> Result<String, Self.Error> in
-                    let (signer, privateKey)  = signerAndPrivateKey
-                    do {
-                        let token = try signer.generateJWTToken(usingPrivateKey: privateKey)
-                        return .success(token)
-                    } catch {
-                        return .failure(.init(message: "Could not generate JWT token"))
-                    }
             }
     }
 

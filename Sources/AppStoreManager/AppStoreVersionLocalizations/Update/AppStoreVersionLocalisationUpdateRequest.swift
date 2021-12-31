@@ -1,5 +1,5 @@
 //
-//  AppStoreVersionLocalizationUpdateRequest.swift
+//  AppStoreVersionLocalisationUpdateRequest.swift
 //  
 //
 //  Created by Mateusz Kuznik on 25/06/2021.
@@ -7,13 +7,13 @@
 
 import Foundation
 
-public struct AppStoreVersionLocalizationUpdateRequest {
+public struct AppStoreVersionLocalisationUpdateRequest {
     public let createData: Data
     public let id: String
 
     public init(
         withIdentifier id: String,
-        for new: AppStoreVersionLocalizationUpdate) throws {
+        for new: AppStoreVersionLocalisationUpdate) throws {
 
         let body = BodyParameters(data: new)
         createData = try JSONEncoder().encode(body)
@@ -22,7 +22,7 @@ public struct AppStoreVersionLocalizationUpdateRequest {
 }
 
 ///https://developer.apple.com/documentation/appstoreconnectapi/modify_an_app_store_version_localization
-extension AppStoreVersionLocalizationUpdateRequest: Request {
+extension AppStoreVersionLocalisationUpdateRequest: Request {
 
     public struct ResponseObject: Decodable {
         public let attributes: AppStoreVersionLocalization.Attributes

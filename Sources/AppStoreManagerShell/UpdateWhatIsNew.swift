@@ -8,8 +8,6 @@
 import Foundation
 import AppStoreManager
 import ArgumentParser
-import os
-import Combine
 
 struct UpdateWhatIsNew: ParsableCommand {
 
@@ -34,91 +32,92 @@ struct UpdateWhatIsNew: ParsableCommand {
             shouldDisplay: true))
     var appIdentifier: String
 
+
+    private func localisedData(with client: Client) async throws -> (localised: [GetAppStoreVersionLocalisation.ResponseObject], toLocalise: [GetAppStoreVersionLocalisation.ResponseObject] ) {
+
+        let getLocalisationsRequest = GetAppStoreVersionsRequests(identifier: appIdentifier, limit: 2)
+        let response = try await client.perform(getLocalisationsRequest).get()
+
+        let readyForSale = try findFirstItem(in: response.data, with: .READY_FOR_SALE)
+        let localised = try await getLocalisations(for: readyForSale, client: client).get().data
+
+        let prepareForSubmission = try findFirstItem(in: response.data, with: .PREPARE_FOR_SUBMISSION)
+        let toLocalise = try await getLocalisations(for: prepareForSubmission, client: client).get().data
+    
+        return (localised, toLocalise)
+    }
+
+    private func groupLocalisations(localised: [GetAppStoreVersionLocalisation.ResponseObject], toLocalise: [GetAppStoreVersionLocalisation.ResponseObject]) -> [(String, GetAppStoreVersionLocalisation.ResponseObject)] {
+
+        let itemsWithLocalisedVersion = toLocalise
+            .compactMap { toLocaliseItem -> (String, GetAppStoreVersionLocalisation.ResponseObject)? in
+                guard
+                    let localisedItem = localised.first(where: { $0.attributes.locale == toLocaliseItem.attributes.locale }),
+                    let whatIsNewOfPreviousVersion = localisedItem.attributes.whatsNew
+                else {
+                    print("There is no localised version for \(toLocaliseItem.attributes.locale). Ignoring...")
+                    return nil
+                }
+                guard toLocaliseItem.attributes.whatsNew == nil else {
+                    print("The localised version for \(toLocaliseItem.attributes.locale) is already set. Skipping...")
+                    return nil
+                }
+                return (whatIsNewOfPreviousVersion, toLocaliseItem)
+            }
+
+        return itemsWithLocalisedVersion
+    }
+
+    private func createUpdateLocalisationsRequests(from itemsWithLocalisedVersion: [(String, GetAppStoreVersionLocalisation.ResponseObject)]) -> [AppStoreVersionLocalisationUpdateRequest] {
+
+        return itemsWithLocalisedVersion
+            .map { (whatIsNew, toLocaliseItem) in
+                AppStoreVersionLocalisationUpdate(
+                    attributes: .init(whatsNew: whatIsNew),
+                    id: toLocaliseItem.id)
+            }
+            .compactMap { localisation -> AppStoreVersionLocalisationUpdateRequest? in
+                do {
+                    return try AppStoreVersionLocalisationUpdateRequest(withIdentifier: localisation.id, for: localisation)
+                } catch {
+                    let stringError = "\(error)"
+
+                    print("Could not create request object. \(stringError)")
+                    return nil
+                }
+            }
+    }
+
     func run() throws {
         let client = Client(authorizationTokenProvider: { jwtToken })
 
-        //Get last two. The second one should have status ready for sell. We will take what is new from this one and paste them to the new version
-        let getLocalisations = GetAppStoreVersionsRequests(identifier: appIdentifier, limit: 2)
-
         let semaphore = DispatchSemaphore(value: 0)
-        let cancelable = client
-            .perform(getLocalisations)
-            .flatMap { response -> AnyPublisher<([GetAppStoreVersionLocalisation.ResponseObject], [GetAppStoreVersionLocalisation.ResponseObject]), Client.Error> in
+        Task {
+            let data: (localised: [GetAppStoreVersionLocalisation.ResponseObject], toLocalise: [GetAppStoreVersionLocalisation.ResponseObject])
+            do {
+                data = try await localisedData(with: client)
+            } catch let error as ValidationError {
+                Self.exit(withError: error)
+            } catch {
+                Self.exit(withError: ValidationError("\(error)"))
+            }
 
-                let readyForSale = self.findFirstItem(in: response.data, with: .READY_FOR_SALE)
-                let getLocalised = self.getLocalisations(for: readyForSale, client: client)
-
-                let prepareForSubmission = self.findFirstItem(in: response.data, with: .PREPARE_FOR_SUBMISSION)
-                let getToLocalise = self.getLocalisations(for: prepareForSubmission, client: client)
-
-                return getLocalised.combineLatest(getToLocalise) { (localised, toLocalise) in
-                    (localised.data, toLocalise.data)
+            let itemsWithLocalisedVersion = groupLocalisations(localised: data.localised, toLocalise: data.toLocalise)
+            let updateRequests = createUpdateLocalisationsRequests(from: itemsWithLocalisedVersion)
+            for request in updateRequests {
+                do {
+                    _ = try await client.perform(request).get()
+                } catch {
+                    print("Could not update the What is new section for: \(request.id). \n\(error) \nTrying next... ")
                 }
-                .eraseToAnyPublisher()
             }
-            .map { (localised, toLocalise) -> [(String, GetAppStoreVersionLocalisation.ResponseObject)] in
-
-                //connect the localised message from the previous version with new one
-                let itemsWithLocalisedVersion = toLocalise.compactMap { toLocaliseItem -> (String, GetAppStoreVersionLocalisation.ResponseObject)? in
-                    guard
-                        let localisedItem = localised.first(where: { $0.attributes.locale == toLocaliseItem.attributes.locale }),
-                        let whatIsNew = localisedItem.attributes.whatsNew
-                    else {
-                        os_log("There is no localised version for %{public}@", log: Logger.logger, type: .info, toLocaliseItem.attributes.locale)
-                        //ignore if new language
-                        return nil
-                    }
-                    guard toLocaliseItem.attributes.whatsNew == nil else {
-                        os_log("The localised version for %{public}@ is already set. Skipping.", log: Logger.logger, type: .info, toLocaliseItem.attributes.locale)
-                        return nil
-                    }
-                    return (whatIsNew, toLocaliseItem)
-                }
-
-                return itemsWithLocalisedVersion
-            }
-            .flatMap { (itemsWithLocalisedVersion) -> AnyPublisher<[AnyPublisher<Response<AppStoreVersionLocalizationUpdateRequest.ResponseObject>, Client.Error>.Output], AnyPublisher<Response<AppStoreVersionLocalizationUpdateRequest.ResponseObject>, Client.Error>.Failure> in
-
-                //map (String, GetAppStoreVersionLocalisation.ResponseObject) to the request object
-                let updatesRequests = itemsWithLocalisedVersion
-                    .map { (whatIsNew, toLocaliseItem) in
-                        AppStoreVersionLocalizationUpdate(
-                            attributes: .init(whatsNew: whatIsNew),
-                            id: toLocaliseItem.id)
-                    }
-                    .compactMap { localisation -> AnyPublisher<Response<AppStoreVersionLocalizationUpdateRequest.ResponseObject>, Client.Error>? in
-                        do {
-                            let updateRequest = try AppStoreVersionLocalizationUpdateRequest(withIdentifier: localisation.id, for: localisation)
-                            return client.perform(updateRequest)
-                        } catch {
-                            let stringError = "\(error)"
-                            os_log("Could not create request object. %{public}@", log: Logger.logger, type: .fault, stringError)
-                            return nil
-                        }
-                    }
-                os_log("Items to update: %{public}i", log: Logger.logger, type: .info, updatesRequests.count)
-
-                //perform each request
-                return Publishers.MergeMany(updatesRequests).collect().eraseToAnyPublisher()
-            }
-            .sink(
-                receiveCompletion: { (completion) in
-                    switch completion {
-                    case .finished:
-                        Self.exit(withError: CleanExit.message(""))
-                    case let .failure(error):
-                        Self.exit(withError: ValidationError("\(error)"))
-                    }
-                },
-                receiveValue: { (_) in
-                    semaphore.signal()
-                })
+            Self.exit(withError: CleanExit.message(""))
+        }
         _ = semaphore.wait(timeout: .now() + .seconds(10))
-        withExtendedLifetime(cancelable, {})
         Self.exit(withError: ValidationError("The request has timed out"))
     }
 
-    private func findFirstItem(in response: GetAppStoreVersionsRequests.Response, with state: AppStoreVersion.State) -> GetAppStoreVersionsRequests.ResponseObject {
+    private func findFirstItem(in response: GetAppStoreVersionsRequests.Response, with state: AppStoreVersion.State) throws -> GetAppStoreVersionsRequests.ResponseObject {
         let readyForSell = response.first { item in
             item.attributes.appStoreState == state
         }
@@ -126,14 +125,13 @@ struct UpdateWhatIsNew: ParsableCommand {
         if let item = readyForSell {
             return item
         } else {
-            os_log("There is no %{public}@ version 😔", log: Logger.logger, type: .error, state.rawValue)
-            _exit(ExitCode.failure.rawValue)
+            throw ValidationError("There is no \(state.rawValue) version 😔")
         }
     }
 
-    private func getLocalisations(for item: GetAppStoreVersionsRequests.ResponseObject, client: Client) -> AnyPublisher<Response<[GetAppStoreVersionLocalisation.ResponseObject]>, Client.Error> {
+    private func getLocalisations(for item: GetAppStoreVersionsRequests.ResponseObject, client: Client) async -> Result<Response<[GetAppStoreVersionLocalisation.ResponseObject]>, Client.Error> {
 
         let get = GetAppStoreVersionLocalisation(identifier: item.id)
-        return client.perform(get)
+        return await client.perform(get)
     }
 }
