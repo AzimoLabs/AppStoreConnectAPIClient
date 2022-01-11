@@ -1,12 +1,11 @@
 //
-//  CreateVersion.swift
+//  Versions.swift
 //  
 //
 //  Created by Mateusz Kuznik on 24/06/2021.
 //
 
 import Foundation
-import os
 import ArgumentParser
 import AppStoreManager
 
@@ -47,24 +46,24 @@ struct CreateVersionAction: ParsableCommand {
         let update = CreateVersion(
             attributes: .init(platform: platform, versionString: appVersion),
             app: .init(id: appIdentifier))
-        let request = try CreateVersionRequest(for: update)
+
+        let request: CreateVersionRequest
+        do {
+            request = try CreateVersionRequest(for: update)
+        } catch {
+            Self.exit(withError: ValidationError("Could not create request object. \(error)"))
+        }
 
         let semaphore = DispatchSemaphore(value: 0)
-        let cancelable = client.perform(request)
-            .sink(
-                receiveCompletion: { (completion) in
-                    switch completion {
-                    case .finished:
-                        Self.exit(withError: CleanExit.message(""))
-                    case let .failure(error):
-                        Self.exit(withError: ValidationError("\(error)"))
-                    }
-                },
-                receiveValue: { (app) in
-                    Self.exit(withError: CleanExit.message("\(app.data)"))
-                })
+        Task {
+            do {
+                let response = try await client.perform(request).get().data
+                Self.exit(withError: CleanExit.message("Created: \(response.attributes.versionString)"))
+            } catch {
+                Self.exit(withError: ValidationError("\(error)"))
+            }
+        }
         _ = semaphore.wait(timeout: .now() + .seconds(10))
-        withExtendedLifetime(cancelable, {})
         Self.exit(withError: ValidationError("The request has timed out"))
     }
 }

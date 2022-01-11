@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import os
 import AppStoreManager
 import ArgumentParser
 
@@ -56,9 +55,9 @@ struct Authorise: ParsableCommand {
 
         switch authorizationTokenResult {
         case let .success(token):
-            Authorise.exit(withError: CleanExit.message(token))
+            Self.exit(withError: CleanExit.message(token))
         case let .failure(error):
-            Authorise.exit(withError: ValidationError("Could not generate JWT token: \(error)"))
+            Self.exit(withError: ValidationError("Could not generate JWT token: \(error)"))
         }
     }
 }

@@ -1,5 +1,5 @@
 //
-//  AppStoreVersionLocalizationUpdate.swift
+//  AppStoreVersionLocalisationUpdate.swift
 //  
 //
 //  Created by Mateusz Kuznik on 25/06/2021.
@@ -8,7 +8,7 @@
 import Foundation
 
 ///https://developer.apple.com/documentation/appstoreconnectapi/appstoreversionlocalizationupdaterequest/data
-public struct AppStoreVersionLocalizationUpdate: Encodable {
+public struct AppStoreVersionLocalisationUpdate: Encodable {
     public let attributes: Attributes
     public let id: String
     let type = "appStoreVersionLocalizations"
@@ -19,7 +19,7 @@ public struct AppStoreVersionLocalizationUpdate: Encodable {
     }
 }
 
-extension AppStoreVersionLocalizationUpdate {
+extension AppStoreVersionLocalisationUpdate {
 
     ///https://developer.apple.com/documentation/appstoreconnectapi/appstoreversionlocalizationupdaterequest/data/attributes
     public struct Attributes: Encodable {
