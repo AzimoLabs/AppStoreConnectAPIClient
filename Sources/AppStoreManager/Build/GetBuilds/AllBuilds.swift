@@ -33,6 +33,7 @@ extension AllBuildsRequest {
     public enum Filter: Hashable {
         case version(String)
         case appIdentifier(String)
+        case processingState([Build.ProcessingState])
     }
 }
 
@@ -44,6 +45,8 @@ extension AllBuildsRequest.Filter: QueryItemData {
             item = "version"
         case .appIdentifier:
             item = "app"
+        case .processingState:
+            item = "processingState"
         }
         return "filter[\(item)]"
     }
@@ -53,6 +56,8 @@ extension AllBuildsRequest.Filter: QueryItemData {
         case let .version(value),
              let .appIdentifier(value):
             return value
+        case let .processingState(state):
+            return state.map(\.rawValue).joined(separator: ",")
         }
     }
 }

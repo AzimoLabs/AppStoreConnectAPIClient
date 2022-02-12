@@ -35,18 +35,18 @@ extension Build {
         /// The version number of the uploaded build
         public let version: String
         /// The processing state of the build indicating that it is not yet available for testing.
-        public let processingState: ProccessingState
+        public let processingState: ProcessingState
 
         public init(
             version: String,
-            processingState: ProccessingState) {
+            processingState: ProcessingState) {
 
             self.version = version
             self.processingState = processingState
         }
     }
 
-    public enum ProccessingState: String, Decodable {
+    public enum ProcessingState: String, Decodable {
         case processing = "PROCESSING"
         case failed = "FAILED"
         case invalid = "INVALID"
