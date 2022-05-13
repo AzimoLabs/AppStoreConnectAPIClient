@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SwiftJWT
+import JWTKit
 import CryptoKit
 
 /// Helper object which generate the JWT token to authorize requests to the _AppStoreConnect API_.
@@ -45,11 +45,9 @@ public struct AppStoreConnectSigner {
     /// - Parameter privateKey: The private key used to sign the token.
     /// - Returns: The signed token to use to authorize requests.
     public func generateJWTToken(usingPrivateKey privateKey: Data) throws -> String {
-        let header = Header(kid: keyIdentifier)
-        var jwt = JWT(header: header, claims: createPayload())
-        let signer = JWTSigner.es256(privateKey: privateKey)
-        let signedJWT = try jwt.sign(using: signer)
-        return signedJWT
+        let signer = JWTSigners()
+        try signer.use(.es256(key: .private(pem: privateKey)))
+        return try signer.sign(createPayload(), kid: .init(string: keyIdentifier))
     }
 
     /// Creates the instance of a `Claims` required by the `SwiftJWT` framework.
@@ -70,13 +68,17 @@ public struct AppStoreConnectSigner {
     }
 }
 
-private struct ClaimsAppStoreJWT: Claims {
+private struct ClaimsAppStoreJWT {
     let iss: String
     let aud: String
     let exp: Date
-
 }
 
+extension ClaimsAppStoreJWT: JWTPayload {
+    func verify(using signer: JWTKit.JWTSigner) throws {
+        try AudienceClaim(stringLiteral: aud).verifyIntendedAudience(includes: aud)
+    }
+}
 /// The payload required to create a JWT token.
 ///
 /// Only the **issuerIdentifier** is required.

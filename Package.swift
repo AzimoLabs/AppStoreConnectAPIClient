@@ -1,4 +1,4 @@
-// swift-tools-version:5.1
+// swift-tools-version:5.5
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -22,7 +22,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/IBM-Swift/Swift-JWT.git", from: "3.6.200"),
+        .package(url: "https://github.com/vapor/jwt-kit.git", from: "4.4.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.0.2")),
         ],
     targets: [
@@ -31,9 +31,9 @@ let package = Package(
         .target(
             name: "AppStoreManagerAuthorization",
             dependencies: [
-                "SwiftJWT"
+                .product(name: "JWTKit", package: "jwt-kit")
         ]),
-        .target(
+        .executableTarget(
             name: "AppStoreManagerShell",
             dependencies: [
                 "AppStoreManagerAuthorization",
