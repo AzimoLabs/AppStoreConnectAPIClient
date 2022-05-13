@@ -5,7 +5,8 @@ import ArgumentParser
 
 extension BundleIdPlatform: ExpressibleByArgument {}
 
-struct AppStoreManager: ParsableCommand {
+@main
+struct AppStoreManager: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "appStore",
         abstract: "An Appstore REST API",
@@ -18,5 +19,3 @@ struct AppStoreManager: ParsableCommand {
             Authorise.self
         ])
 }
-
-AppStoreManager.main()

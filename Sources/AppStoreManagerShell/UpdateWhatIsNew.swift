@@ -9,7 +9,7 @@ import Foundation
 import AppStoreManager
 import ArgumentParser
 
-struct UpdateWhatIsNew: ParsableCommand {
+struct UpdateWhatIsNew: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         abstract: "This command will get the recent version in the status `Ready to sell` and copy paste the `What is new` section to the version in the `Prepare for submission` status",
@@ -22,16 +22,13 @@ struct UpdateWhatIsNew: ParsableCommand {
     @Option(
         help: ArgumentHelp(
             "The JWT token",
-            discussion: "To generate JWT token use the authorise ",
-            shouldDisplay: true))
+            discussion: "To generate JWT token use the authorise "))
     var jwtToken: String
 
     @Option(
         help: ArgumentHelp(
-            "The application identifier",
-            shouldDisplay: true))
+            "The application identifier"))
     var appIdentifier: String
-
 
     private func localisedData(with client: Client) async throws -> (localised: [GetAppStoreVersionLocalisation.ResponseObject], toLocalise: [GetAppStoreVersionLocalisation.ResponseObject] ) {
 
@@ -88,33 +85,28 @@ struct UpdateWhatIsNew: ParsableCommand {
             }
     }
 
-    func run() throws {
+    func run() async throws {
         let client = Client(authorizationTokenProvider: { jwtToken })
 
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            let data: (localised: [GetAppStoreVersionLocalisation.ResponseObject], toLocalise: [GetAppStoreVersionLocalisation.ResponseObject])
-            do {
-                data = try await localisedData(with: client)
-            } catch let error as ValidationError {
-                Self.exit(withError: error)
-            } catch {
-                Self.exit(withError: ValidationError("\(error)"))
-            }
-
-            let itemsWithLocalisedVersion = groupLocalisations(localised: data.localised, toLocalise: data.toLocalise)
-            let updateRequests = createUpdateLocalisationsRequests(from: itemsWithLocalisedVersion)
-            for request in updateRequests {
-                do {
-                    _ = try await client.perform(request).get()
-                } catch {
-                    print("Could not update the What is new section for: \(request.id). \n\(error) \nTrying next... ")
-                }
-            }
-            Self.exit(withError: CleanExit.message(""))
+        let data: (localised: [GetAppStoreVersionLocalisation.ResponseObject], toLocalise: [GetAppStoreVersionLocalisation.ResponseObject])
+        do {
+            data = try await localisedData(with: client)
+        } catch let error as ValidationError {
+            Self.exit(withError: error)
+        } catch {
+            Self.exit(withError: ValidationError("\(error)"))
         }
-        _ = semaphore.wait(timeout: .now() + .seconds(10))
-        Self.exit(withError: ValidationError("The request has timed out"))
+
+        let itemsWithLocalisedVersion = groupLocalisations(localised: data.localised, toLocalise: data.toLocalise)
+        let updateRequests = createUpdateLocalisationsRequests(from: itemsWithLocalisedVersion)
+        for request in updateRequests {
+            do {
+                _ = try await client.perform(request).get()
+            } catch {
+                print("Could not update the What is new section for: \(request.id). \n\(error) \nTrying next... ")
+            }
+        }
+        Self.exit(withError: CleanExit.message(""))
     }
 
     private func findFirstItem(in response: GetAppStoreVersionsRequests.Response, with state: AppStoreVersion.State) throws -> GetAppStoreVersionsRequests.ResponseObject {

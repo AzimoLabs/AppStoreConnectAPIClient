@@ -9,7 +9,7 @@ import Foundation
 import ArgumentParser
 import AppStoreManager
 
-struct CreateVersionAction: ParsableCommand {
+struct CreateVersionAction: AsyncParsableCommand {
 
     static var configuration = CommandConfiguration(
         commandName: "create-version",
@@ -18,29 +18,25 @@ struct CreateVersionAction: ParsableCommand {
     @Option(
         help: ArgumentHelp(
             "The JWT token",
-            discussion: "To generate JWT token use the authorise ",
-            shouldDisplay: true))
+            discussion: "To generate JWT token use the authorise "))
     var jwtToken: String
 
     @Option(
         help: ArgumentHelp(
-            "The app version to create",
-            shouldDisplay: true))
+            "The app version to create"))
     var appVersion: String
 
     @Option(
         help: ArgumentHelp(
-            "The app identifier",
-            shouldDisplay: true))
+            "The app identifier"))
     var appIdentifier: String
 
     @Option(
         help: ArgumentHelp(
-            "Platform for which the version should be created",
-            shouldDisplay: true))
+            "Platform for which the version should be created"))
     var platform: BundleIdPlatform = .iOS
 
-    func run() throws {
+    func run() async throws {
 
         let client = Client(authorizationTokenProvider: { jwtToken })
         let update = CreateVersion(
@@ -54,16 +50,11 @@ struct CreateVersionAction: ParsableCommand {
             Self.exit(withError: ValidationError("Could not create request object. \(error)"))
         }
 
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            do {
-                let response = try await client.perform(request).get().data
-                Self.exit(withError: CleanExit.message("Created: \(response.attributes.versionString)"))
-            } catch {
-                Self.exit(withError: ValidationError("\(error)"))
-            }
+        do {
+            let response = try await client.perform(request).get().data
+            Self.exit(withError: CleanExit.message("Created: \(response.attributes.versionString)"))
+        } catch {
+            Self.exit(withError: ValidationError("\(error)"))
         }
-        _ = semaphore.wait(timeout: .now() + .seconds(10))
-        Self.exit(withError: ValidationError("The request has timed out"))
     }
 }

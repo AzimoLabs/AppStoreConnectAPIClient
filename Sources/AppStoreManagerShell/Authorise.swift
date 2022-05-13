@@ -16,20 +16,17 @@ struct Authorise: ParsableCommand {
 
     @Option(
         help: ArgumentHelp(
-            "The key identifier",
-            shouldDisplay: true))
+            "The key identifier"))
     var keyId: String
 
     @Option(
         help: ArgumentHelp(
-            "The issuer identifier",
-            shouldDisplay: true))
+            "The issuer identifier"))
     var issuerId: String
 
     @Option(
         help: ArgumentHelp(
-            "The private key",
-            shouldDisplay: true))
+            "The private key"))
     var privateKey: String
 
 
