@@ -9,12 +9,14 @@ on:
 jobs:
   build:
     name: Create Release
-    runs-on: macos-latest
+    runs-on: macos-12 #macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
       - name: Build Release 
-        run: swift build -c release
+        run: |
+          swift -version
+          swift build -c release
       - name: Create Release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
