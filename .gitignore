@@ -2,3 +2,9 @@
 .build/
 *.xcodeproj
 Packages/
+Package.pins
+xcuserdata/
+*.hmap
+*.dSYM.zip
+*.dSYM
+.DS_Store
