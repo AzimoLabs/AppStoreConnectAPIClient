@@ -6,8 +6,6 @@
 //
 
 import Foundation
-import JWTKit
-import CryptoKit
 
 /// Helper object which generate the JWT token to authorize requests to the _AppStoreConnect API_.
 ///
@@ -44,39 +42,9 @@ public struct AppStoreConnectSigner {
     ///
     /// - Parameter privateKey: The private key used to sign the token.
     /// - Returns: The signed token to use to authorize requests.
-    public func generateJWTToken(usingPrivateKey privateKey: Data) throws -> String {
-        let signer = JWTSigners()
-        try signer.use(.es256(key: .private(pem: privateKey)))
-        return try signer.sign(createPayload(), kid: .init(string: keyIdentifier))
-    }
-
-    /// Creates the instance of a `Claims` required by the `SwiftJWT` framework.
-    ///
-    /// The [Apple documentation](https://developer.apple.com/documentation/appstoreconnectapi/generating_tokens_for_api_requests) specifies the `aud` parameter as a `String` but the `ClaimsStandardJWT` gets an array. From the [JWT documentation](https://tools.ietf.org/html/rfc7519#section-4.1.3):
-    /// ```
-    /// In the special case when the JWT has one audience,
-    /// the "aud" value MAY be a single case-sensitive
-    /// string containing a StringOrURI value.
-    /// ```
-    ///
-    /// Hopefully this will works 🙏
-    private func createPayload() -> ClaimsAppStoreJWT {
-        ClaimsAppStoreJWT(
-            iss: payload.issuerIdentifier,
-            aud: payload.audience,
-            exp: payload.expirationTime)
-    }
-}
-
-private struct ClaimsAppStoreJWT {
-    let iss: String
-    let aud: String
-    let exp: Date
-}
-
-extension ClaimsAppStoreJWT: JWTPayload {
-    func verify(using signer: JWTKit.JWTSigner) throws {
-        try AudienceClaim(stringLiteral: aud).verifyIntendedAudience(includes: aud)
+    public func generateJWTToken(usingPrivateKey privateKey: String) throws -> String {
+        let generator = JWTGenerator(keyIdentifier: keyIdentifier, payload: payload)
+        return try generator.token(withPrivateKey: privateKey)
     }
 }
 /// The payload required to create a JWT token.
@@ -92,7 +60,7 @@ public struct AppStoreConnectPayload {
 
     /// The token's expiration time; tokens that expire more than 4 minutes in the future are not valid (Ex: 1528408800)
     /// It is encoded as a *exp* value in the TWT payload
-    fileprivate var expirationTime: Date {
+    internal var expirationTime: Date {
         return Date(timeIntervalSinceNow: 60 * 4)
     }
 

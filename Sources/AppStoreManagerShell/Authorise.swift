@@ -31,17 +31,14 @@ struct Authorise: ParsableCommand {
 
 
     func run() throws {
-        let privateKey: String
-        if self.privateKey.hasPrefix("-----BEGIN") == false,
-           self.privateKey.contains("\\n") {
-
+        var privateKey = privateKey
+        
+        if privateKey.hasPrefix("-----BEGIN") == false {
             privateKey = """
             -----BEGIN PRIVATE KEY-----
-            \(self.privateKey.replacingOccurrences(of: "\\n", with: "\n"))
+            \(privateKey.replacingOccurrences(of: "\\n", with: "\n"))
             -----END PRIVATE KEY-----
             """
-        } else {
-            privateKey = self.privateKey
         }
 
         let authorizationService = AuthorizationService(

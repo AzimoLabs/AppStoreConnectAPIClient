@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "AppStoreManager",
     platforms: [
-       .macOS(.v10_15)
+        .macOS(.v11)
     ],
     products: [
         .library(
@@ -22,24 +22,20 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/vapor/jwt-kit.git", from: "4.4.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.1.2")),
-        ],
+        .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.1.2"))
+    ],
     targets: [
         .target(
             name: "AppStoreManager"),
         .target(
-            name: "AppStoreManagerAuthorization",
-            dependencies: [
-                .product(name: "JWTKit", package: "jwt-kit")
-        ]),
+            name: "AppStoreManagerAuthorization"),
         .executableTarget(
             name: "AppStoreManagerShell",
             dependencies: [
                 "AppStoreManagerAuthorization",
                 "AppStoreManager",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-        ]),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]),
         .testTarget(
             name: "AppStoreManagerTests",
             dependencies: [
