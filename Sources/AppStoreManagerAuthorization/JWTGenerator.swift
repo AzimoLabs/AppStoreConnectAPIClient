@@ -104,11 +104,3 @@ extension Data {
             .first ?? Data()
     }
 }
-
-
-extension JWTGenerator {
-    
-    internal enum Error: Swift.Error {
-        case cannotConvertDataToString
-    }
-}
